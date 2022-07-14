@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+
+<launch>  
+    <param name="rate" type="int" value="30" />
+    <param name="printAngles" type="bool" value="False" />
+    <param name="devPath" type="str" value="/dev/ttyUSB0" />
+    <param name="baudRate" type="int" value="38400" />
+    
+    <node name="ros_sbgc_driver" pkg="ros_sbgc_driver" type="ros_sbgc_driver_node" respawn="true" output="screen"/>
+</launch>
