@@ -18,5 +18,5 @@ This document contains an introduction on different standard and customized `ROS
 
 **freq_sweep:** This `C++` package injects a sinusoidal frequency sweep in the roll, pitch, and yaw gimbal axes to identify its transfer function. The messages are published to the topic called `/gimbal_target_speed` to perform reference speed tracking. The x-, y-, and z-axes of `/gimbal_target_speed` messages denote the roll, pitch, and yaw motions of the gimbal respectively. The commanded messages published to the topics `/gimbal_target_speed` or `/gimbal_target_orientation` and the corresponding measurements obtained from the topics `/gimbal_imu_angles` or `/gimbal_enc_angles` give us the transfer function of the gimbal.
 
-
+**het_ster_calib:** This package performs heterogeneous stereo calibration of the two cameras. The ouput is a homography matrix that maps pixels from one camera frame to pixels in another camera frame which is required by the predictive algorithm to perform proper image stitching. You need to specify the dierctories where the PTZ and the omni images are saved. The naming convention should be 
 
