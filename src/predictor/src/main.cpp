@@ -22,8 +22,8 @@
 
 //////////////////////////
 //Changed from old version
-#include <opencv2/opencv.hpp>
-#include <opencv2/highgui.hpp>
+//#include <opencv2/opencv.hpp>
+//#include <opencv2/highgui.hpp>
 //////////////////////////
 
 #include <sensor_msgs/image_encodings.h>
@@ -57,8 +57,9 @@
 #include "HomographyCalculation.h"
 #include "parameters.h"
 
-//Delays the PTZ image
-void delayCbPTZ(const sensor_msgs::ImageConstPtr& msg, Parameters* P)
+
+//Store the PTZ image
+void imageCb_ptz(const sensor_msgs::ImageConstPtr& msg, Parameters* P)
 { 
     cv_bridge::CvImagePtr cv_ptr;
 
@@ -76,33 +77,16 @@ void delayCbPTZ(const sensor_msgs::ImageConstPtr& msg, Parameters* P)
       return;
     }
 
-	cv::Mat src_ptz, map1, map2;
-	src_ptz = cv_ptr->image;
-	
-    	//Undistort PTZ image
-    	cv::undistort(src_ptz, (*P).PTZ_delay, (*P).Kp, (*P).Dp, cv::noArray()); 
-	cv::initUndistortRectifyMap((*P).Kp, (*P).Dp, cv::noArray(), (*P).Kp_new, cv::Size(src_ptz.cols, src_ptz.rows), 0, map1, map2);
-	cv::remap(src_ptz, (*P).PTZ_delay, map1, map2, cv::INTER_LINEAR, cv::BORDER_CONSTANT, 0); 
-	
-	if((*P).PD == 0)
-	{
-	    cv::namedWindow("Final", cv::WND_PROP_FULLSCREEN);
-            cv::setWindowProperty("Final", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN); 
-            cv::circle((*P).PTZ_delay, cv::Point(960, 540), 5, cv::Scalar(0, 0, 255), cv::FILLED);
-    	    
-            cv::imshow("Final", (*P).PTZ_delay);
-            cv::waitKey(1); 		    
-	}
-	
+	(*P).ptz_delay = cv_ptr->image;
 }
 
-//Delays the Omni image
-void delayCbOmni(const sensor_msgs::ImageConstPtr& msg, Parameters* P)
+//Store the Omni image
+void imageCb_omni(const sensor_msgs::ImageConstPtr& msg, Parameters* P)
 {
     cv_bridge::CvImagePtr cv_ptr;
-
     //Get time header info
     std_msgs::Header h = msg->header;
+    (*P).t0_omni = double(h.stamp.sec) + 1e-9*double(h.stamp.nsec);
     
     try
     {
@@ -114,18 +98,7 @@ void delayCbOmni(const sensor_msgs::ImageConstPtr& msg, Parameters* P)
       return;
     }
     
-    cv::Mat src_omni = cv_ptr->image;
-    
-    // Crop image
-    cv::Rect myROI = cv::Rect(0, 0, 1504, 1504);
-    cv::Mat OmniImgDist(src_omni, myROI);
-    
-    // Undistort image
-    cv::Mat omni_img_und;
-    cv::fisheye::undistortImage(OmniImgDist, omni_img_und, (*P).Ko, (*P).Do, (*P).Ko, cv::Size(OmniImgDist.cols, OmniImgDist.rows));
-
-    // Flip image
-    cv::flip(omni_img_und, (*P).omni_delay, -1);
+    (*P).omni_delay = cv_ptr->image;
 }
 
 //Store the currently commanded gimble angle in the right parameter
@@ -159,14 +132,11 @@ void IMUAngleCb(const boost::shared_ptr<const geometry_msgs::TwistStamped>& msg,
         else
             (*P).pitch_imu_cur = asin(sinp); //rad
             */
-            
                         
         (*P).t_new = (*msg).header.stamp.sec + 1e-9 * (*msg).header.stamp.nsec;
         (*P).pitch_new = (*msg).twist.angular.x; 
         (*P).yaw_new = (*msg).twist.angular.y;
-        (*P).roll_new = (*msg).twist.angular.z;
-
-	        
+        (*P).roll_new = (*msg).twist.angular.z;        
 }
 
 int main(int argc, char** argv){
@@ -175,8 +145,17 @@ int main(int argc, char** argv){
     ros::NodeHandle node;
 
     Parameters P; //Creating an instance of class Param
-    //std::cout << P.stitch << " " << P.PD << std::endl;
-    if(P.PD == 1) //Whether you want the predictor or not; will require more information like commanded angles etc...
+    //P.begin_alg = ros::Time::now().toSec(); //For estimating the algorithm run-time
+    int predictor_rate; //Run the predictor ar 30 Hz, independent of camera FPS
+    node.getParam("/predictor_rate", predictor_rate);
+    double predictor_duration = 1/predictor_rate;
+    
+    //Get the predictor and stitching boolean from global ROS parameter server
+    node.getParam("/predictor", P.PD);
+    node.getParam("/stitch", P.stitch);
+    std::cout << "Predictor: " << P.PD << " Stitch: " << P.stitch << std::endl;    
+    
+    if(P.PD == true) //Whether you want the predictor or not; will require more information like commanded angles etc...
     {
         //New ROS subscriber
         ImageStitching IS; HomographyCalculation HC;
@@ -191,35 +170,14 @@ int main(int argc, char** argv){
     
         // Image subscriber should use different node name and subscriber.
         image_transport::ImageTransport it_(node);
-        image_transport::TransportHints hints("compressed", ros::TransportHints()); // To interpret compressed video not required here as the videos are already uncompressed
-        //To add delays to Omni
-        message_filters::Subscriber<sensor_msgs::Image> sub_delay_omni(node, "/omnicam/omnicam/image_raw", 1);
-        message_filters::TimeSequencer<sensor_msgs::Image> seq_delay_omni(sub_delay_omni, ros::Duration(P.added_delay2), ros::Duration(P.ros_duration), 1 + int(P.ros_rate * P.added_delay2));
-        seq_delay_omni.registerCallback(boost::bind(&delayCbOmni, _1, &P));
+        //image_transport::TransportHints hints("compressed", ros::TransportHints()); // To interpret compressed video not required here as the videos are already uncompressed
         
-        //To add delays to PTZ, PTZ cam will be delayed with or without the Predictor active
-        message_filters::Subscriber<sensor_msgs::Image> sub_delay_ptz(node, "/PTZcam/PTZcam/image_raw", 1);
-        message_filters::TimeSequencer<sensor_msgs::Image> seq_delay_ptz(sub_delay_ptz, ros::Duration(P.added_delay2), ros::Duration(P.ros_duration), 1 + int(P.ros_rate * P.added_delay2));
-        seq_delay_ptz.registerCallback(boost::bind(&delayCbPTZ, _1, &P));
         
-        ros::Rate loop_rate(P.ros_rate);
-        while(ros::ok())
-        {
-            ros::spinOnce();
-            loop_rate.sleep();
-        }
-
-        return 0;
-    }
-    else
-    {
-        //To add delays to PTZ, PTZ cam will be delayed with or without the Predictor active
-        message_filters::Subscriber<sensor_msgs::Image> sub_delay_ptz(node, "/PTZcam/PTZcam/image_raw", 1);
-        message_filters::TimeSequencer<sensor_msgs::Image> seq_delay_ptz(sub_delay_ptz, ros::Duration(P.added_delay2), ros::Duration(P.ros_duration), 1 + int(P.ros_rate * P.added_delay2));
-        seq_delay_ptz.registerCallback(boost::bind(&delayCbPTZ, _1, &P));
-    
-    
-        ros::Rate loop_rate(P.ros_rate);
+        //To store PTZ and Omni images in the global "parameter" variables to be used by other functions
+        image_transport::Subscriber image_sub_omni = it_.subscribe("/omni_delay", 1, boost::bind(&imageCb_omni, _1, &P));
+        image_transport::Subscriber image_sub_ptz = it_.subscribe("/ptz_delay", 1, boost::bind(&imageCb_ptz, _1, &P));
+        
+        ros::Rate loop_rate(predictor_rate);
         while(ros::ok())
         {
             ros::spinOnce();

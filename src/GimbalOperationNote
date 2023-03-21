@@ -1,7 +1,0 @@
-Gimbal operation
-
-1. Connect the USB port. Do "chmod 666 /dev/ttyUSB0" to get access to the port.
-2. Connect the battery 
-3. Turn on the gimbal switch. If it doesn't work: double press the gimbal button.
-Note: Gimbal baudRate is 115200, doesn't work otherwise.
-

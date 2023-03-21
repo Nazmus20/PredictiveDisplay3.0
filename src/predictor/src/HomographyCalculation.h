@@ -4,7 +4,7 @@
 #define HomographyCalculation_H
 
 //Standard Libraries
-//#include <vector>
+#include <vector>
 
 //OpenCV Libraries
 //#include <opencv2/opencv.hpp>
@@ -79,10 +79,17 @@ public:
     HomographyCalculation(); //Default constructor
 
     ~HomographyCalculation(); //Default destructor
+    
+    //Binary Search
+    std::vector<int> BinarySearch(std::vector<double> &arr, double &num);
+
+    //Linear interpolation
+    double LinInterp(double y_start, double y_final, double x, double x_start, double x_final);
 
     //Calculate homography based on gimbal IMU angles
     void homCalc(double pitch0, double pitch1, double yaw0, double yaw1, Parameters* P);
 
+    //Convert the actual gimbal quaternions to actual poses
     void PoseCallback(const boost::shared_ptr<const geometry_msgs::PoseStamped>& msg, Parameters* P);  
 };
 

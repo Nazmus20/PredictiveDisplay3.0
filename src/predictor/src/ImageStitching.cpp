@@ -21,12 +21,13 @@ void ImageStitching::alignImages(Mat& im1, Mat& im2, Mat& h2, Mat& h1, Parameter
 {   
     if (!im1.empty() && !im2.empty())
     { 
-        Mat h21 = h1* h2; //Predicted PTZ image in the Omnicam frame
+        //Mat h21 = h1 * (*P).H; //Predicted PTZ image in the Omnicam frame ??OLD
+        Mat h21 = h1 * h2 * (*P).H; //Predicted PTZ image in the Omnicam frame
         
         // Use homography to warp image
     	//Warp delayed Omni image to delayed PTZ image in Omni frame 
     	Mat im1delayed;
-    	warpPerspective(im1, im1delayed, h2, im2.size());
+    	warpPerspective(im1, im1delayed, h2*(*P).H, im2.size());
     	
     	//Warp delayed PTZ image in Omni frame to predicted PTZ image in Omni frame 
     	Mat im1pred;
@@ -71,7 +72,12 @@ void ImageStitching::alignImages(Mat& im1, Mat& im2, Mat& h2, Mat& h1, Parameter
             circle(ouImage, Point(960, 540), 5, Scalar(0, 0, 255), FILLED);
     	    
             imshow("Final", ouImage);
-            waitKey(1); 	
+            waitKey(1); 
+            
+            //For estimating the algorithm time 
+            //(*P).end_alg = ros::Time::now().toSec();
+            //std::cout << ((*P).end_alg - (*P).begin_alg)*1000 << std::endl; 
+            //(*P).begin_alg = (*P).end_alg;	
     	}
     }
 }

@@ -70,8 +70,8 @@ int main(int argc, char **argv)
     n.param<double>("minRoll_deg", limits.min_roll, 0);
     n.param<double>("maxPitch_deg", limits.max_pitch, 30);
     n.param<double>("minPitch_deg", limits.min_pitch, -90);
-    n.param<double>("maxYaw_deg", limits.max_yaw, 90);
-    n.param<double>("minYaw_deg", limits.min_yaw, -90);
+    n.param<double>("maxYaw_deg", limits.max_yaw, 120);
+    n.param<double>("minYaw_deg", limits.min_yaw, -120);
 
     std::cout << "Params:\n" << "Rate:\t\t" << rate << std::endl;
     std::cout << "Print Angle:\t" << printAngles << std::endl;
@@ -87,39 +87,46 @@ int main(int argc, char **argv)
     
     GimbalController gc(devPath, baudRate, &n, limits);
     gc_ptr = &gc;
-
-    while (!gc.connect())
+    bool val = false;
+    while (!(val = gc.connect()) )
     {
-        //sleep(2); //Commented out Haseeb's code
-        usleep(10000);
+        sleep(2); //Commented out Haseeb's code
+        // usleep(100);
+
+        std::cout << "value was: " << val << std::endl; 
     }
+    std::cout << "While loop finished." << std::endl;
+
+
 
     gc.requestData();
-    usleep(10000);            
-            //std::cout << "Doing the other  thing" << std::endl;
+    usleep(100);            
+    std::cout << "Requesting data finished." << std::endl;
     
     while(ros::ok())
     {
-        int timeout = 10;
+        int timeout = 100;
         while (timeout > 0 && gc.processData() != 0)
         {            
-            usleep(10000);
-            //std::cout << "Doing the thing" << std::endl;
+            //usleep(100);
+            // std::cout << "Inside the timeout loop" << std::endl;
             gc.requestData();
-            usleep(10000);
+            usleep(5000);
             timeout--;            
         }
+        //std::cout << timeout << std::endl;
         if (timeout == 0)
         {
             std::cout << "No response from gimbal, attempting reconnect..." << cntr << std::endl; //Added a counter
             cntr = cntr + 1; //Added a counter
             while (!gc.connect())
             {
-                //sleep(2); //Commented out Haseeb's code
-                usleep(10000); 
+                sleep(1);//Commented out Haseeb's code
+                // usleep(100); 
             }
             continue;
         }
+
         
         if (printAngles)
         {
@@ -140,7 +147,7 @@ int main(int argc, char **argv)
         }        
 
         ros::spinOnce();    
-        loop_rate.sleep();
+        //loop_rate.sleep();
     }
     return(0);
 }   

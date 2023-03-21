@@ -1,259 +1,275 @@
-//Custom libraraies
-//#include "parameters.h"
+// Custom libraraies
+// #include "parameters.h"
 
-//ROS Libraries
+// ROS Libraries
 #include <ros/ros.h>
 #include <sensor_msgs/Joy.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <math.h>
 
-//#include "std_msgs/Float64.h"
-//#include <nav_msgs/Odometry.h>
-//#include <geometry_msgs/point.h>
-//#include <geometry_msgs/quaternionstamped.h>
-//#include <tf/transform_listener.h>
-//#include <tf2/linearmath/quaternion.h>
-//#include <tf2_ros/transform_broadcaster.h>
-//#include <visualization_msgs/marker.h>
+// #include "std_msgs/Float64.h"
+// #include <nav_msgs/Odometry.h>
+// #include <geometry_msgs/point.h>
+// #include <geometry_msgs/quaternionstamped.h>
+// #include <tf/transform_listener.h>
+// #include <tf2/linearmath/quaternion.h>
+// #include <tf2_ros/transform_broadcaster.h>
+// #include <visualization_msgs/marker.h>
 
-//To publish ROS clock topic
-//#include "rosgraph_msgs/Clock.h"
+// To publish ROS clock topic
+// #include "rosgraph_msgs/Clock.h"
 
-//To introduce delay using ROS
+// To introduce delay using ROS
 #include "message_filters/time_sequencer.h"
 #include "message_filters/subscriber.h"
 
+double added_delay1; // sec, 1st communication delay from commanded quaternions to reaching gimbal
+double added_delay2; // sec, 2nd communication delay from gimbal IMU obtained to IMU angles being displayed
 
+int rate;
+double max_angular_velocity; // deg/s
 
-double added_delay1 = 1; //sec, 1st communication delay from commanded quaternions to reaching gimbal
-double added_delay2 = 1; //sec, 2nd communication delay from gimbal IMU obtained to IMU angles being displayed
-
-double rate = 10;
-double max_angular_velocity = 5; //deg/s
-double min_angular_velocity = 0; //deg/s
+double min_angular_velocity = 0; // deg/s
 double max_stick_position = 1;
 double min_stick_position = 0;
-bool isFirstData = 0; //Initial value
-bool isGimbalTopicPublished = 0; //Initially no gimbal data is received
-double pi = 3.14159265358979323846; //Value of pi
-bool isFirstTime = 0; //Boolean to record time
-double begin = 0; //Record time info
-double end; //Record time info
-//Global vaiable to store the pose data
+bool isFirstData = 0;               // Initial value
+bool isGimbalTopicPublished = 0;    // Initially no gimbal data is received
+double pi = 3.14159265358979323846; // Value of pi
+bool isFirstTime = 0;               // Boolean to record time
+double begin = 0;                   // Record time info
+double end;                         // Record time info
+// Global vaiable to store the pose data
 geometry_msgs::TwistStamped twist_msg_cmd, twist_msg_prev;
 
-//Currently obtained quaternion command
+// Currently obtained quaternion command
 geometry_msgs::PoseStamped quat_msg_cmd, delayed_imu_ang;
 
-//Storing Yaw and pitch in radians
+// Storing Yaw and pitch in radians
 double prev_ang_rate_yaw, prev_ang_rate_pitch;
 
-//Linear interpolation
+// Linear interpolation
 double LinInterp(double y_start, double y_final, double x, double x_start, double x_final)
 {
-    //Slope
+    // Slope
     double m = (y_final - y_start) / (x_final - x_start);
-    //Interpolate 1
+    // Interpolate 1
     double y1 = y_start + m * (x - x_start);
-    //Interpolate 2
+    // Interpolate 2
     double y2 = y_final - m * (x_final - x);
-    //Average
+    // Average
     double y = (y1 + y2) / 2;
-    
+
     return y;
 }
 
-//Integrate using 3/8 Simpson's rule
+// Integrate using 3/8 Simpson's rule
 double SimpsonIntegrate(double delayed_msg_time, double cmd_msg_time, double delayed_msg_rate, double cmd_msg_rate)
 {
-    double t1 = (2*delayed_msg_time + cmd_msg_time)/3;
-    double t2 = (delayed_msg_time + 2*cmd_msg_time)/3;
-    
-    //Linear interpolation of the rate based on t1 and t2
+    double t1 = (2 * delayed_msg_time + cmd_msg_time) / 3;
+    double t2 = (delayed_msg_time + 2 * cmd_msg_time) / 3;
+
+    // Linear interpolation of the rate based on t1 and t2
     double cmd_msg_rate_t1 = LinInterp(delayed_msg_rate, cmd_msg_rate, t1, delayed_msg_time, cmd_msg_time);
     double cmd_msg_rate_t2 = LinInterp(delayed_msg_rate, cmd_msg_rate, t2, delayed_msg_time, cmd_msg_time);
-    
-    //Simpson's rule formula                    
-    double cmd_msg_delta = (cmd_msg_time - delayed_msg_time)/8 * (delayed_msg_rate + 3 * cmd_msg_rate_t1 + 3 * cmd_msg_rate_t2 + cmd_msg_rate);
+
+    // Simpson's rule formula
+    double cmd_msg_delta = (cmd_msg_time - delayed_msg_time) / 8 * (delayed_msg_rate + 3 * cmd_msg_rate_t1 + 3 * cmd_msg_rate_t2 + cmd_msg_rate);
     return cmd_msg_delta;
 }
 
 // Read incoming actual IMU quaternions after a delay (added_delay2)
-void gimbalActAnglesCB(const geometry_msgs::PoseStamped& msg)
+void gimbalActAnglesCB(const geometry_msgs::PoseStamped &msg)
 {
     delayed_imu_ang = msg;
     double begin = ros::Time::now().toSec();
-    if(isGimbalTopicPublished == 0)
+    if (isGimbalTopicPublished == 0)
     {
         isGimbalTopicPublished = 1;
-        //Current actual IMU angles
+        // Current actual IMU angles
         twist_msg_prev.header.stamp = ros::Time::now();
         twist_msg_prev.header.frame_id = "current_actual_angles";
-    
-        //Quaternion to be converted to angles
+
+        // Quaternion to be converted to angles
         double q_x = msg.pose.orientation.x;
         double q_y = msg.pose.orientation.y;
         double q_z = msg.pose.orientation.z;
-        double q_w = msg.pose.orientation.w;    
-        
-        //Roll (z-axis rotation of the camera)
+        double q_w = msg.pose.orientation.w;
+
+        // Roll (z-axis rotation of the camera)
         double sinr_cosp = 2 * (q_w * q_x + q_y * q_z);
         double cosr_cosp = 1 - 2 * (q_x * q_x + q_y * q_y);
-        twist_msg_prev.twist.angular.z = atan2(sinr_cosp, cosr_cosp); //rad, will remain constant
-        
-        //Yaw (y-axis rotation of the camera)
+        twist_msg_prev.twist.angular.z = atan2(sinr_cosp, cosr_cosp); // rad, will remain constant
+
+        // Yaw (y-axis rotation of the camera)
         double siny_cosp = +2.0 * (q_w * q_z + q_x * q_y);
         double cosy_cosp = +1.0 - 2.0 * (q_y * q_y + q_z * q_z);
-        twist_msg_prev.twist.angular.y = atan2(siny_cosp, cosy_cosp); //rad, need to zero it out
-        //Pitch (x-axis rotation of the camera)
-        double sinp = 2 * (q_w * q_y - q_z * q_x); //rad
+        twist_msg_prev.twist.angular.y = atan2(siny_cosp, cosy_cosp); // rad, need to zero it out
+        // Pitch (x-axis rotation of the camera)
+        double sinp = 2 * (q_w * q_y - q_z * q_x); // rad
         if (abs(sinp) >= 1)
-            twist_msg_prev.twist.angular.x = copysign(pi / 2, sinp); //use 90 deg if out of range, rad
+            twist_msg_prev.twist.angular.x = copysign(pi / 2, sinp); // use 90 deg if out of range, rad
         else
-            twist_msg_prev.twist.angular.x = asin(sinp); //rad
-        
-        prev_ang_rate_yaw = 0; prev_ang_rate_pitch = 0;
+            twist_msg_prev.twist.angular.x = asin(sinp); // rad
+
+        prev_ang_rate_yaw = 0;
+        prev_ang_rate_pitch = 0;
     }
 }
 
-//Read incoming joystick command integrate and publish to commanded angles topic
-void gimbalCmdAnglesCb(const sensor_msgs::Joy& msg)
+// Read incoming joystick command integrate and publish to commanded angles topic
+void gimbalCmdAnglesCb(const sensor_msgs::Joy &msg)
 {
-    //Need to convert this msg from quaternion to euler
-    if(isGimbalTopicPublished == 1)
+
+    // Need to convert this msg from quaternion to euler
+    if (isGimbalTopicPublished == 1)
     {
-        //Convert current joystick command to current angle rate command
+        // Convert current joystick command to current angle rate command
         twist_msg_cmd.header.stamp = msg.header.stamp;
         twist_msg_cmd.header.frame_id = "current_angle_command";
 
         double cur_ang_rate_yaw, cur_ang_rate_pitch;
-            
-        if(msg.axes[2] <= -.95 || msg.axes[5] <= -.95) //start recording time
+
+        if (msg.axes[2] <= -.95 || msg.axes[5] <= -.95) // start recording time
         {
-            if(isFirstTime ==0)
+            if (isFirstTime == 0)
             {
                 isFirstTime = 1;
                 begin = ros::Time::now().toSec();
-            }         
-            
-            if(msg.axes[2] <= -.95)
+            }
+
+            if (msg.axes[2] <= -.95)
             {
-                double left_time = ros::Time::now().toSec(); 
-                if(abs(fmod(left_time - begin, 10.0)) <= .05)
+                double left_time = ros::Time::now().toSec();
+                if (abs(fmod(left_time - begin, 10.0)) <= .05)
                 {
                     std::cout << "Time elapsed: " << std::setprecision(4) << (left_time - begin) << " s" << std::endl;
                 }
-                //Yaw rate of the conventional gimbal frame (z-axis is yaw), rad/s
-                cur_ang_rate_yaw = -(max_angular_velocity - min_angular_velocity) / (max_stick_position - min_stick_position) * msg.axes[3] * pi/180;
-                //Pitch rate of the conventional gimbal frame (y-axis is the pitch), rad/s
-                cur_ang_rate_pitch = -(max_angular_velocity - min_angular_velocity) / (max_stick_position - min_stick_position) * msg.axes[4] * pi/180;
+                // Yaw rate of the conventional gimbal frame (z-axis is yaw), rad/s
+                cur_ang_rate_yaw = -(max_angular_velocity - min_angular_velocity) / (max_stick_position - min_stick_position) * msg.axes[3] * pi / 180;
+                // Pitch rate of the conventional gimbal frame (y-axis is the pitch), rad/s
+                cur_ang_rate_pitch = -(max_angular_velocity - min_angular_velocity) / (max_stick_position - min_stick_position) * msg.axes[4] * pi / 180;
             }
-            if(msg.axes[5] <= -.95)
+            if (msg.axes[5] <= -.95)
             {
-                //Yaw rate of the conventional gimbal frame (z-axis is yaw), rad/s
-                double cur_ang_rate_yaw = -(max_angular_velocity - min_angular_velocity) / (max_stick_position - min_stick_position) * msg.axes[0] * pi/180;
-                //Pitch rate of the conventional gimbal frame (y-axis is the pitch), rad/s
-                double cur_ang_rate_pitch = -(max_angular_velocity - min_angular_velocity) / (max_stick_position - min_stick_position) * msg.axes[1] * pi/180;
+                // Yaw rate of the conventional gimbal frame (z-axis is yaw), rad/s
+                double cur_ang_rate_yaw = -(max_angular_velocity - min_angular_velocity) / (max_stick_position - min_stick_position) * msg.axes[0] * pi / 180;
+                // Pitch rate of the conventional gimbal frame (y-axis is the pitch), rad/s
+                double cur_ang_rate_pitch = -(max_angular_velocity - min_angular_velocity) / (max_stick_position - min_stick_position) * msg.axes[1] * pi / 180;
             }
         }
         else
         {
-            if(begin != 0)
+            if (begin != 0)
             {
-                end = ros::Time::now().toSec();   
+                end = ros::Time::now().toSec();
                 std::cout << "Duration in seconds: " << std::setprecision(4) << end - begin << std::endl;
                 isFirstTime = 0;
-                begin = 0; 
+                begin = 0;
             }
         }
-        
 
-        
-        //double delta_yaw = SimpsonIntegrate(twist_msg_prev.header.stamp.sec + twist_msg_prev.header.stamp.nsec * 1e-9, twist_msg_cmd.header.stamp.sec + twist_msg_cmd.header.stamp.nsec * 1e-9, prev_ang_rate_yaw, cur_ang_rate_yaw);
-        //double delta_pitch = SimpsonIntegrate(twist_msg_prev.header.stamp.sec + twist_msg_prev.header.stamp.nsec * 1e-9, twist_msg_cmd.header.stamp.sec + twist_msg_cmd.header.stamp.nsec * 1e-9, prev_ang_rate_pitch, cur_ang_rate_pitch);
-        
-        //Using th = th_dot * dt to integrate, midpoint integration
-        double delta_yaw = (cur_ang_rate_yaw + prev_ang_rate_yaw)/2 * (twist_msg_cmd.header.stamp.sec + twist_msg_cmd.header.stamp.nsec * 1e-9 - twist_msg_prev.header.stamp.sec - twist_msg_prev.header.stamp.nsec * 1e-9);
-        double delta_pitch = -(cur_ang_rate_pitch + prev_ang_rate_pitch)/2 * (twist_msg_cmd.header.stamp.sec + twist_msg_cmd.header.stamp.nsec * 1e-9 - twist_msg_prev.header.stamp.sec - twist_msg_prev.header.stamp.nsec * 1e-9);
-        
-        twist_msg_cmd.twist.angular.y = twist_msg_prev.twist.angular.y + delta_yaw; //Yaw, rad
-        twist_msg_cmd.twist.angular.x = twist_msg_prev.twist.angular.x + delta_pitch; //Pitch, rad
-        twist_msg_cmd.twist.angular.z = twist_msg_prev.twist.angular.z; //Roll, rad
-            
+        // double delta_yaw = SimpsonIntegrate(twist_msg_prev.header.stamp.sec + twist_msg_prev.header.stamp.nsec * 1e-9, twist_msg_cmd.header.stamp.sec + twist_msg_cmd.header.stamp.nsec * 1e-9, prev_ang_rate_yaw, cur_ang_rate_yaw);
+        // double delta_pitch = SimpsonIntegrate(twist_msg_prev.header.stamp.sec + twist_msg_prev.header.stamp.nsec * 1e-9, twist_msg_cmd.header.stamp.sec + twist_msg_cmd.header.stamp.nsec * 1e-9, prev_ang_rate_pitch, cur_ang_rate_pitch);
+
+        // Using th = th_dot * dt to integrate, midpoint integration
+        double delta_yaw = (cur_ang_rate_yaw + prev_ang_rate_yaw) / 2 * (twist_msg_cmd.header.stamp.sec + twist_msg_cmd.header.stamp.nsec * 1e-9 - twist_msg_prev.header.stamp.sec - twist_msg_prev.header.stamp.nsec * 1e-9);
+        double delta_pitch = -(cur_ang_rate_pitch + prev_ang_rate_pitch) / 2 * (twist_msg_cmd.header.stamp.sec + twist_msg_cmd.header.stamp.nsec * 1e-9 - twist_msg_prev.header.stamp.sec - twist_msg_prev.header.stamp.nsec * 1e-9);
+
+        twist_msg_cmd.twist.angular.y = twist_msg_prev.twist.angular.y + delta_yaw;   // Yaw, rad
+        twist_msg_cmd.twist.angular.x = twist_msg_prev.twist.angular.x + delta_pitch; // Pitch, rad
+        twist_msg_cmd.twist.angular.z = twist_msg_prev.twist.angular.z;               // Roll, rad
+
         twist_msg_prev.header.stamp = twist_msg_cmd.header.stamp;
         twist_msg_prev.twist.angular.y = twist_msg_cmd.twist.angular.y;
         twist_msg_prev.twist.angular.x = twist_msg_cmd.twist.angular.x;
         twist_msg_prev.twist.angular.z = twist_msg_cmd.twist.angular.z;
-        
-        //Save cur_ang_rate to prev_ang_rate
+
+        // Save cur_ang_rate to prev_ang_rate
         prev_ang_rate_yaw = cur_ang_rate_yaw;
-        prev_ang_rate_pitch = cur_ang_rate_pitch;      
+        prev_ang_rate_pitch = cur_ang_rate_pitch;
     }
 }
 
 // Read incoming joystick command and publish to the desired gimbal position topic
-void joy2gimbalTargetPosDelayCB(const geometry_msgs::TwistStamped& msg)
+void joy2gimbalTargetPosDelayCB(const geometry_msgs::TwistStamped &msg)
 {
     double end = ros::Time::now().toSec();
-    //Convert the current angles to quaternions to be sent to gimbal
+    // Convert the current angles to quaternions to be sent to gimbal
     quat_msg_cmd.header.stamp = msg.header.stamp;
     quat_msg_cmd.header.frame_id = "quaternion_command";
-    
-    quat_msg_cmd.pose.orientation.x = sin(msg.twist.angular.z/2) * cos(msg.twist.angular.x/2) * cos(msg.twist.angular.y/2) - cos(msg.twist.angular.z/2) * sin(msg.twist.angular.x/2) * sin(msg.twist.angular.y/2);
-    quat_msg_cmd.pose.orientation.y = cos(msg.twist.angular.z/2) * sin(msg.twist.angular.x/2) * cos(msg.twist.angular.y/2) + sin(msg.twist.angular.z/2) * cos(msg.twist.angular.x/2) * sin(msg.twist.angular.y/2);
-    quat_msg_cmd.pose.orientation.z = cos(msg.twist.angular.z/2) * cos(msg.twist.angular.x/2) * sin(msg.twist.angular.y/2) - sin(msg.twist.angular.z/2) * sin(msg.twist.angular.x/2) * cos(msg.twist.angular.y/2);
-    quat_msg_cmd.pose.orientation.w = cos(msg.twist.angular.z/2) * cos(msg.twist.angular.x/2) * cos(msg.twist.angular.y/2) + sin(msg.twist.angular.z/2) * sin(msg.twist.angular.x/2) * sin(msg.twist.angular.y/2);
+
+    quat_msg_cmd.pose.orientation.x = sin(msg.twist.angular.z / 2) * cos(msg.twist.angular.x / 2) * cos(msg.twist.angular.y / 2) - cos(msg.twist.angular.z / 2) * sin(msg.twist.angular.x / 2) * sin(msg.twist.angular.y / 2);
+    quat_msg_cmd.pose.orientation.y = cos(msg.twist.angular.z / 2) * sin(msg.twist.angular.x / 2) * cos(msg.twist.angular.y / 2) + sin(msg.twist.angular.z / 2) * cos(msg.twist.angular.x / 2) * sin(msg.twist.angular.y / 2);
+    quat_msg_cmd.pose.orientation.z = cos(msg.twist.angular.z / 2) * cos(msg.twist.angular.x / 2) * sin(msg.twist.angular.y / 2) - sin(msg.twist.angular.z / 2) * sin(msg.twist.angular.x / 2) * cos(msg.twist.angular.y / 2);
+    quat_msg_cmd.pose.orientation.w = cos(msg.twist.angular.z / 2) * cos(msg.twist.angular.x / 2) * cos(msg.twist.angular.y / 2) + sin(msg.twist.angular.z / 2) * sin(msg.twist.angular.x / 2) * sin(msg.twist.angular.y / 2);
 }
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     std::cout << "joy2gimbal started" << std::endl;
- 
-    ros::init(argc,argv,"joy2gimbal_node");
+
+    ros::init(argc, argv, "joy2gimbal_node");
     ros::NodeHandle node;
-    
+    node.param<int>("joystick_rate", rate, 100);                  // Joystick sub and pub rate
+    node.param<double>("gimbal_delay1", added_delay1, 0.1);       // Delay from laptop to gimbal, outgoing
+    node.param<double>("gimbal_delay2", added_delay2, 0.1);       // Delay from gimbal to laptop, incoming
+    node.param<double>("max_ang_vel", max_angular_velocity, 5.0); // Max gimbal movement rate
+
+    // std::cout << "Joystick rate: " << rate << std::endl;
+    // std::cout << "Gimbal outgoing delay: " << added_delay1 << std::endl;
+    // std::cout << "Gimbal incoming delay: " << added_delay2 << std::endl;
+    // std::cout << "Max gimbal rotation rate: " << max_angular_velocity << std::endl;
+
     ros::Rate loop_rate(rate);
 
-    
-    
     ros::Subscriber sub_joy = node.subscribe("/joy_orig", 1, &gimbalCmdAnglesCb);
-    //ros::Subscriber sub_ang = node.subscribe("/gimbal_imu_angles", 1, &gimbalActAnglesCb);
-    
-    //To add delays between the command received at the gimbal vs the imu angle reaching the display (added_delay2)
+    // ros::Subscriber sub_ang = node.subscribe("/gimbal_imu_angles", 1, &gimbalActAnglesCb);
+
+    // To add delays between the command received at the gimbal vs the imu angle reaching the display (added_delay2)
     message_filters::Subscriber<geometry_msgs::PoseStamped> sub_delay_imu(node, "/gimbal_imu_angles", 1);
-    message_filters::TimeSequencer<geometry_msgs::PoseStamped> seq_delay_imu(sub_delay_imu, ros::Duration(added_delay2), ros::Duration(1/rate), int(1 + (rate * added_delay2)));
+    message_filters::TimeSequencer<geometry_msgs::PoseStamped> seq_delay_imu(sub_delay_imu, ros::Duration(added_delay2), ros::Duration(1 / rate), int(1 + (rate * added_delay2)));
     seq_delay_imu.registerCallback(&gimbalActAnglesCB);
-    
-    ros::Publisher pub_quat_cmd = node.advertise<geometry_msgs::PoseStamped> ("/gimbal_target_orientation", 1);
-    
-    ros::Publisher pub_imu_delay = node.advertise<geometry_msgs::PoseStamped> ("/delayed_imu_angles", 1);
-        
-    ros::Publisher pub_ang_cmd = node.advertise<geometry_msgs::TwistStamped> ("/commanded_angles", 1);
-    
-    //To add delays between the command send vs the command received at the gimbal (added_delay1)
+
+    ros::Publisher pub_quat_cmd = node.advertise<geometry_msgs::PoseStamped>("/gimbal_target_orientation", 1);
+
+    ros::Publisher pub_imu_delay = node.advertise<geometry_msgs::PoseStamped>("/delayed_imu_angles", 1);
+
+    ros::Publisher pub_ang_cmd = node.advertise<geometry_msgs::TwistStamped>("/commanded_angles", 1);
+
+    // To add delays between the command send vs the command received at the gimbal (added_delay1)
     message_filters::Subscriber<geometry_msgs::TwistStamped> sub_delay_cmd(node, "/commanded_angles", 1);
-    message_filters::TimeSequencer<geometry_msgs::TwistStamped> seq_delay_cmd(sub_delay_cmd, ros::Duration(added_delay1), ros::Duration(1/rate), int(1 + (rate * added_delay1)));
+    message_filters::TimeSequencer<geometry_msgs::TwistStamped> seq_delay_cmd(sub_delay_cmd, ros::Duration(added_delay1), ros::Duration(1 / rate), int(1 + (rate * added_delay1)));
     seq_delay_cmd.registerCallback(&joy2gimbalTargetPosDelayCB);
-    
-    
-    while(ros::ok())
-	{
-	    ros::spinOnce();
-	    if(!quat_msg_cmd.header.stamp.sec == 0) 
-	    {   
-	        pub_quat_cmd.publish(quat_msg_cmd); //Publish the delayed quaternion message to the gimbal, quaternions
-	    }
-            if(!twist_msg_cmd.header.stamp.sec == 0)
-            {	    
-		pub_ang_cmd.publish(twist_msg_cmd); //Publish the currently commanded angles, rad
-	    }
-	    if(!delayed_imu_ang.header.stamp.sec == 0)
-	    {	        
-	        pub_imu_delay.publish(delayed_imu_ang); //Publish the delayed gimbal IMU angles
-	    }
-	    loop_rate.sleep();
-	}
+
+    while (ros::ok())
+    {
+        ros::spinOnce();
+        if (!quat_msg_cmd.header.stamp.sec == 0)
+        {
+
+            pub_quat_cmd.publish(quat_msg_cmd); // Publish the delayed quaternion message to the gimbal, quaternions
+        }
+        if (!twist_msg_cmd.header.stamp.sec == 0)
+        {
+            // For measuring delays
+            
+            double headerTime = double(twist_msg_cmd.header.stamp.sec) + 1e-9 * double(twist_msg_cmd.header.stamp.nsec);
+            double currentTime = ros::Time::now().toSec();
+
+            double diff = currentTime - headerTime;
+
+            std::cout << diff * 1000 << std::endl;
+            // Remove once finished
+            pub_ang_cmd.publish(twist_msg_cmd); // Publish the currently commanded angles, rad
+        }
+        if (!delayed_imu_ang.header.stamp.sec == 0)
+        {
+
+            pub_imu_delay.publish(delayed_imu_ang); // Publish the delayed gimbal IMU angles
+        }
+        loop_rate.sleep();
+    }
 
     return 0;
 }

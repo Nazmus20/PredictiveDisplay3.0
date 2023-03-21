@@ -15,7 +15,8 @@ public:
     double pi = 3.14159265358979323846; //Defined the value of pi
 
     //Parameters to change
-    double added_delay2 = 1; //Delay in the camera feed
+    double begin_alg; //starting time of the algorithm
+    double end_alg; //Ending time of the algorithm
 
     //Hardware setup factors which are constants throughout the experiment
 
@@ -39,14 +40,16 @@ public:
  
     //Distortion vector for PTZcam (Pre determined)
     cv::Mat Dp = (cv::Mat_<double>(1, 5) << -3.94952719e-1, -6.68450461e-1, 
-    5.26731133e-4, 1.10059397e-3, 7.20450676);
-
+    5.26731133e-4, 1.10059397e-3, 7.20450676); 
+    
+    cv::Mat ptz_map1, ptz_map2, omni_map1, omni_map2;//Rectification map of PTZcam and omnicam
+    
     cv::Mat orig_show_omni, orig_show_PTZ; //Initializing empty matrix for PTZ image and Omnicam
-    cv::Mat PTZ_delay, omni_delay; //DELAYED PTZ and omni image 
+    cv::Mat ptz_delay, omni_delay; //DELAYED PTZ and omni image 
     cv::Mat H = (cv::Mat_<double>(3, 3) << 3.662595664683535, 0.05440616409171908, -1999.161621659138, -0.2770712432149974, 3.76913088044113, -2018.638427077817,
    -0.0001093606810511352, -8.214723739695882e-05, 0.9999999999999999); //Initializing the Omni to PTZ homography matrix
 
-    cv::Mat H_delay;
+    //cv::Mat H_delay;
     
     //double t_node0, t_node1; //The algorithm delay present in the whole calculation
     
@@ -63,13 +66,11 @@ public:
     double fp = 5; //PTZ focal length, mm
     double fo = 1; //Omni focal length, mm
     */
-    double ros_rate = 10;
-    double ros_duration = 1/ros_rate;
-    bool stitch = 1; //Stitching image or split screen display
+    //double ros_rate = 10;
+    //double ros_duration = 1/ros_rate;
     
-    //int counter = 1; //For debugging
-    //double t_debug0, t_debug1;
-    bool PD = 1; //WHether you are running the predictor or not
+    //Boolean for stitching or predicting to run
+    bool stitch, PD; //Stitching image or split screen display
 };
 
 

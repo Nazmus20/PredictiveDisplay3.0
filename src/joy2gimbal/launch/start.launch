@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+
+<launch>  
+    <include file="$(find usb_cam)/launch/usb_cam.launch" />
+    <include file="$(find joy)/launch/ps4joy.launch" />
+    <include file="$(find ros_sbgc_driver)/launch/ros_sbgc_driver.launch" />
+    <param name="joy_node/autorepeat_rate" value="30"/> 
+</launch>

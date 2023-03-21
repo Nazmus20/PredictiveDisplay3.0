@@ -74,7 +74,10 @@ public:
     {
         if (m_isConnected == true)
         {
+            std::cout << "Turns out device was open." << std::endl;
+
             close(m_device);
+            sleep(2);
             m_isConnected = false;
         }
 
@@ -82,12 +85,14 @@ public:
         {            
             m_com_obj.initialize(m_device);
             m_sbgc_parser.init(&m_com_obj);
-            std::cout << "Connected." << std::endl;
+            std::cout << "Connected but like actually" << std::endl;
             m_isConnected = true;
             return m_isConnected;
         }
         else
         {
+            std::cout << "Serial setup returned something other than a0." << std::endl;
+            
             //std::cout << "Could not open com port." << std::endl;
             return m_isConnected;
         } 

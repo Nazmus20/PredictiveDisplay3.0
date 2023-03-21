@@ -1,0 +1,3 @@
+[submodule "submodules/sbgc-api"]
+	path = submodules/sbgc-api
+	url = https://github.com/ncsuarc/sbgc-api

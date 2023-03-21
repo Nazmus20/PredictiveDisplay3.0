@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+
+<launch>  
+    <!--
+    <include file="$(find joy)/launch/ps4joy.launch" />
+    <include file="$(find ros_sbgc_driver)/launch/ros_sbgc_driver.launch" />
+    <param name="joy_node/autorepeat_rate" value="30"/> 
+    <param name="rate" type="int" value="30" />
+    <param name="printAngles" type="bool" value="False" />
+    <param name="devPath" type="str" value="/dev/ttyUSB0" />
+    <param name="baudRate" type="int" value="38400" />
+    <node name="predictor" pkg="predictor" type="predictor_main" respawn="true" output="screen"/>
+    -->
+    <param name="gimbal_delay1" type="double" value="0.0" />
+    <param name="gimbal_delay2" type="double" value="0.0" />
+    <param name="joystick_rate" type="int" value="1000" />
+    <param name="max_ang_vel" type="double" value="5.0" />
+        
+    <node name="joy2gimbal" pkg="joy2gimbal" type="joy2gimbal_node" respawn="true" output="screen"/>
+</launch>
