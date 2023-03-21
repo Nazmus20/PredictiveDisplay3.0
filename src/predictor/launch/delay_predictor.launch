@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+
+<launch>  
+    <param name="camera_fps" type="int" value="10" />
+    <param name="ptz_delay" type="double" value="0.0" />
+    <!-- <param name="omni_delay" type="double" value="1" /> -->
+    <param name="predictor" type="bool" value="True" />
+    <param name="stitch" type="bool" value="True" />
+    <param name="predictor_rate" type="int" value="30" />
+    <node name="add_delay" pkg="predictor" type="predictor_delay" output="screen" respawn="true"/> 
+    <arg name="node_start_delay" default="2.0" />  
+    <node name="predictor" pkg="predictor" type="predictor_main" respawn="true" output="screen" launch-prefix="bash -c 'sleep $(arg node_start_delay); $0 $@' " />
+ 
+</launch>
