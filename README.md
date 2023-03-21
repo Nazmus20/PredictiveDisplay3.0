@@ -21,3 +21,24 @@ This document contains an introduction on different standard and customized `ROS
 
 **het_ster_calib:** This package performs heterogeneous stereo calibration of the two cameras. The ouput is a homography matrix that maps pixels from one camera frame to pixels in another camera frame which is required by the predictive algorithm to perform proper image stitching. You need to specify the dierctories where the PTZ and the omni images are saved. The naming convention should be 
 
+## Step-by-step instructions to run the `ROS` packages
+
+### First-time users
+**Step 1:** After downloading the `GitHub` repository to your `Linux`-based computer navigate to the downloaded directory named `PredictiveDisplay3.0`. Please `build` the packages using `catkin_make` or `catkin build` and source the `devel/setup.bash` file.
+
+**Step 2:** Type `roslaunch joy2gimbal start.launch` to `launch` the `usb_cam`, `joy`, and `ros-sbgc-driver` together. If there are connectivity errors like `USB0` device is not found then type `sudo chmod 666 /dev/ttyUSB0` to let `ROS` access that port. This launch file publishes camera topics like `/PTZcam/PTZcam/image_raw`, `/omnicam/omnicam/image_raw`, `/gimbal_imu_angles`, and `/gimbal_enc_angles`.
+
+**Step 3:** Then type `roslaunch joy2gimbal joy2gimbal.launch` this launches the `joy2gimbal` package that maps `/joy_orig` topic to `gimbal_target_speed` or `gimbal_target_orientation` based on how it is set up. It also adds transmission delay to the commands being sent to the gimbal and those are recorded in `/delayed_imu_angles` topic. The undelayed commands are published in `/commanded_angles`. Finally, it adds another transmission delay to the incoming `/gimbal_imu_angles` topic. The amount of delays in both these cases are specified in the `launch` file.
+
+**Step 4:** Finally type `roslaunch predictor delay_predictor.launch` which subscribes to the delayed `/gimbal_imu_angles`, `/PTZcam/PTZcam/image_raw`, `/omnicam/omnicam/image_raw`, and /commanded angles` to perform the prediction and stitching as output.
+
+### Demo instructions
+
+We have provided two demo files named `testcase1_diagonal.bag` and `testcase2_horizontal.bag` which contain data collected during normal operation. To utilize this `.bag` file the provided `ROS` package will need to be installed, built, and sourced properly as in step .. 
+
+Once that is done, type `roslaunch predictor delay_predictor.launch` to launch the predictive display.
+
+In a separate terminal type `rosbag play filename.bag` to play the rosbag. Users should see the predictive display pop up. Everytime the bag finishes playing, this previous relaunch the launch file and re play the bag file to continue. 
+
+
+
