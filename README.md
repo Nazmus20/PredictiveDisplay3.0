@@ -34,11 +34,11 @@ This document contains an introduction on different standard and customized `ROS
 
 ### Demo instructions
 
-We have provided two demo files named `testcase1_diagonal.bag` and `testcase2_horizontal.bag` which contain data collected during normal operation. To utilize this `.bag` file the provided `ROS` package will need to be installed, built, and sourced properly as in step .. 
+We have provided two demo files named `testcase1_diagonal.bag` and `testcase2_horizontal.bag` which contain data collected during normal operation. To utilize this `.bag` file the provided `ROS` package will need to be installed, built, and sourced properly as in Step 1. 
 
 Once that is done, type `roslaunch predictor delay_predictor.launch` to launch the predictive display.
 
-In a separate terminal type `rosbag play filename.bag` to play the rosbag. Users should see the predictive display pop up. Everytime the bag finishes playing, this previous relaunch the launch file and re play the bag file to continue. 
+In a separate terminal type `rosbag play filename.bag` to play the rosbag. Users should see the predictive display pop-up. Every time the bag finishes playing, relaunch the launch file and re-play the bag file to continue. 
 
 
 
